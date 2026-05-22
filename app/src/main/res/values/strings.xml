@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">BlissWallpaper</string>
+    <string name="wallpaper_name">Bliss Live Wallpaper</string>
+    <string name="wallpaper_description">A classic Windows XP Bliss live wallpaper with slowly scrolling clouds. Optimized for Pixel 10 Pro XL.</string>
+    <string name="wallpaper_author">Antigravity</string>
+    <string name="apply_wallpaper">Apply Wallpaper</string>
+    <string name="app_description">Bring the iconic look of the Windows XP Bliss wallpaper to your Android home screen. Featuring multi-layered parallax scrolling clouds and high-fidelity graphics optimized for modern displays.</string>
+</resources>

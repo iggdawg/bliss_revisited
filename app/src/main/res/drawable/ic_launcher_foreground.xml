@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 1. Wispy cloud (high background cirrus) -->
+    <path
+        android:pathData="M15,22 C32,17 58,19 78,13 C83,13 88,14 93,16 C83,21 43,19 15,22 Z"
+        android:fillColor="#40FFFFFF" /> <!-- White, 25% opacity -->
+
+    <!-- 2. Small cloud drop shadow -->
+    <path
+        android:pathData="M66,35.5 C66,31.5 69,28.5 73,28.5 C74,28.5 75,29 76,29.5 C78,26.5 82,24.5 86,26.5 C89,27.5 91,30.5 91,33.5 C93,33.5 95,34.5 95,36.5 C95,39.5 93,41.5 90,41.5 L71,41.5 C68,41.5 66,39.5 66,35.5 Z"
+        android:fillColor="#14000050" /> <!-- Soft dark blue-grey shadow (8% opacity) -->
+
+    <!-- 3. Main cloud drop shadow -->
+    <path
+        android:pathData="M26.5,50 C26.5,43 32.5,37 39.5,37 C41.5,37 43.5,38 45.5,39 C48.5,34 54.5,31 60.5,34 C65.5,36 68.5,41 68.5,46 C71.5,46 74.5,48 74.5,52 C74.5,56 71.5,59 67.5,59 L33.5,59 C29.5,59 26.5,56 26.5,50 Z"
+        android:fillColor="#1E000050" /> <!-- Soft dark blue-grey shadow (12% opacity) -->
+
+    <!-- 4. Small cloud (volumetric gradient) -->
+    <path
+        android:pathData="M65,34 C65,30 68,27 72,27 C73,27 74,27.5 75,28 C77,25 81,23 85,25 C88,26 90,29 90,32 C92,32 94,33 94,35 C94,38 92,40 89,40 L70,40 C67,40 65,38 65,34 Z"
+        android:alpha="0.85">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="79.5"
+                android:startY="23"
+                android:endX="79.5"
+                android:endY="40"
+                android:type="linear">
+                <item android:color="#FFFFFF" android:offset="0.0" />
+                <item android:color="#E0EEFF" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 5. Main cloud (volumetric gradient) -->
+    <path
+        android:pathData="M25,48 C25,41 31,35 38,35 C40,35 42,36 44,37 C47,32 53,29 59,32 C64,34 67,39 67,44 C70,44 73,46 73,50 C73,54 70,57 66,57 L32,57 C28,57 25,54 25,48 Z"
+        android:alpha="0.98">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="49"
+                android:startY="29"
+                android:endX="49"
+                android:endY="57"
+                android:type="linear">
+                <item android:color="#FFFFFF" android:offset="0.0" />
+                <item android:color="#DCE6F5" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 6. Back Hill (deep lush green) -->
+    <path
+        android:pathData="M-10,58 C30,58 70,72 118,82 L118,118 L-10,118 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="54"
+                android:startY="58"
+                android:endX="54"
+                android:endY="118"
+                android:type="linear">
+                <item android:color="#15803D" android:offset="0.0" />
+                <item android:color="#14532D" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 7. Front Hill (vibrant grass green) -->
+    <path
+        android:pathData="M-10,78 C20,78 45,56 65,56 C85,56 105,68 118,68 L118,118 L-10,118 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="54"
+                android:startY="56"
+                android:endX="54"
+                android:endY="118"
+                android:type="linear">
+                <item android:color="#22C55E" android:offset="0.0" />
+                <item android:color="#15803D" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 8. Front Hill Sunlit Highlight -->
+    <path
+        android:pathData="M-10,78 C20,78 45,56 65,56 C75,56 85,60 95,64 C70,68 30,83 -10,95 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="42"
+                android:startY="56"
+                android:endX="42"
+                android:endY="95"
+                android:type="linear">
+                <item android:color="#5986EFAC" android:offset="0.0" />  <!-- Semi-transparent light green (35% alpha) -->
+                <item android:color="#0022C55E" android:offset="1.0" />  <!-- Fully transparent green -->
+            </gradient>
+        </aapt:attr>
+    </path>
+
+</vector>
