@@ -9,11 +9,9 @@ import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.graphics.RectF
 import android.graphics.Shader
-import android.os.Handler
-import android.os.Looper
-import android.os.SystemClock
 import android.service.wallpaper.WallpaperService
 import android.util.Log
+import android.view.Choreographer
 import android.view.SurfaceHolder
 import kotlin.math.max
 
@@ -21,7 +19,6 @@ class BlissWallpaperService : WallpaperService() {
 
     companion object {
         private const val TAG = "BlissWallpaperService"
-        private const val FRAME_DELAY_MS = 16L // ~60 FPS
         private const val CLOUD_FADE_PERCENT = 0.15f
     }
 
@@ -30,9 +27,9 @@ class BlissWallpaperService : WallpaperService() {
     }
 
     inner class BlissEngine : Engine() {
-        private val handler = Handler(Looper.getMainLooper())
         private var visible = false
-        private var lastTime = SystemClock.elapsedRealtime()
+        private var lastFrameTimeNanos = 0L
+        private var firstFrame = true
 
         // Bitmaps
         private var bgBitmap: Bitmap? = null
@@ -59,9 +56,28 @@ class BlissWallpaperService : WallpaperService() {
         private var screenH = 2400
 
         // Swipe parallax variables
+        private var targetXOffset = 0.5f
         private var currentXOffset = 0.5f
 
-        private val drawRunnable = Runnable { drawFrame() }
+        // Reusable RectF instances to avoid object allocations in rendering loop
+        private val bgRect = RectF()
+        private val cloudTileRect = RectF()
+
+        private val frameCallback = object : Choreographer.FrameCallback {
+            override fun doFrame(frameTimeNanos: Long) {
+                if (visible) {
+                    val dt = if (lastFrameTimeNanos == 0L) {
+                        0f
+                    } else {
+                        (frameTimeNanos - lastFrameTimeNanos) / 1_000_000_000f
+                    }
+                    lastFrameTimeNanos = frameTimeNanos
+
+                    drawFrame(dt)
+                    Choreographer.getInstance().postFrameCallback(this)
+                }
+            }
+        }
 
         override fun onCreate(surfaceHolder: SurfaceHolder?) {
             super.onCreate(surfaceHolder)
@@ -71,17 +87,18 @@ class BlissWallpaperService : WallpaperService() {
         override fun onDestroy() {
             super.onDestroy()
             visible = false
-            handler.removeCallbacks(drawRunnable)
+            Choreographer.getInstance().removeFrameCallback(frameCallback)
             recycleBitmaps()
         }
 
         override fun onVisibilityChanged(visible: Boolean) {
             this.visible = visible
             if (visible) {
-                lastTime = SystemClock.elapsedRealtime()
-                handler.post(drawRunnable)
+                lastFrameTimeNanos = 0L
+                firstFrame = true
+                Choreographer.getInstance().postFrameCallback(frameCallback)
             } else {
-                handler.removeCallbacks(drawRunnable)
+                Choreographer.getInstance().removeFrameCallback(frameCallback)
             }
         }
 
@@ -89,10 +106,6 @@ class BlissWallpaperService : WallpaperService() {
             super.onSurfaceChanged(holder, format, width, height)
             screenW = width
             screenH = height
-            if (visible) {
-                handler.removeCallbacks(drawRunnable)
-                handler.post(drawRunnable)
-            }
         }
 
         override fun onOffsetsChanged(
@@ -101,16 +114,11 @@ class BlissWallpaperService : WallpaperService() {
             xPixelOffset: Int, yPixelOffset: Int
         ) {
             super.onOffsetsChanged(xOffset, yOffset, xOffsetStep, yOffsetStep, xPixelOffset, yPixelOffset)
-            currentXOffset = xOffset
-            if (visible) {
-                handler.removeCallbacks(drawRunnable)
-                handler.post(drawRunnable)
-            }
+            targetXOffset = xOffset
         }
 
         private fun loadBitmaps() {
             try {
-                // Decode options to optimize memory if needed, but since we are in drawable-nodpi it will not scale automatically.
                 val rawBg = BitmapFactory.decodeResource(resources, R.drawable.bliss_hill_bg)
                 val rawBgFg = BitmapFactory.decodeResource(resources, R.drawable.bliss_hill_foreground)
                 val rawClouds1 = BitmapFactory.decodeResource(resources, R.drawable.bliss_clouds)
@@ -119,8 +127,6 @@ class BlissWallpaperService : WallpaperService() {
                 bgBitmap = rawBg
                 bgForegroundBitmap = rawBgFg
 
-                // Process cloud layers to fade their left/right edges. This guarantees seamless looping
-                // even if the generated textures have clouds that touch the boundaries.
                 if (rawClouds1 != null) {
                     clouds1Bitmap = fadeEdges(rawClouds1, 0.15f)
                     rawClouds1.recycle()
@@ -148,25 +154,19 @@ class BlissWallpaperService : WallpaperService() {
             clouds2Bitmap = null
         }
 
-        /**
-         * Fades the left and right edges of a bitmap to transparent so it tiles seamlessly.
-         */
         private fun fadeEdges(src: Bitmap, fadePercent: Float): Bitmap {
             val w = src.width
             val h = src.height
             val result = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(result)
 
-            // Draw original
             canvas.drawBitmap(src, 0f, 0f, null)
 
-            // Prepare mask paint
             val maskPaint = Paint().apply {
                 isAntiAlias = true
                 xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
             }
 
-            // Left edge fade (0 to fadeWidth)
             val fadeW = w * fadePercent
             maskPaint.shader = LinearGradient(
                 0f, 0f, fadeW, 0f,
@@ -175,7 +175,6 @@ class BlissWallpaperService : WallpaperService() {
             )
             canvas.drawRect(0f, 0f, fadeW, h.toFloat(), maskPaint)
 
-            // Right edge fade (w - fadeWidth to w)
             maskPaint.shader = LinearGradient(
                 w - fadeW, 0f, w.toFloat(), 0f,
                 0xFFFFFFFF.toInt(), 0x00FFFFFF,
@@ -186,16 +185,16 @@ class BlissWallpaperService : WallpaperService() {
             return result
         }
 
-        private fun drawFrame() {
+        private fun drawFrame(dt: Float) {
             val holder = surfaceHolder ?: return
             var canvas: Canvas? = null
             try {
-                canvas = holder.lockCanvas()
+                canvas = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    holder.lockHardwareCanvas()
+                } else {
+                    holder.lockCanvas()
+                }
                 if (canvas != null) {
-                    val now = SystemClock.elapsedRealtime()
-                    val dt = (now - lastTime) / 1000f
-                    lastTime = now
-
                     updateAnimation(dt)
                     render(canvas)
                 }
@@ -210,17 +209,10 @@ class BlissWallpaperService : WallpaperService() {
                     }
                 }
             }
-
-            // Schedule next frame if visible
-            handler.removeCallbacks(drawRunnable)
-            if (visible) {
-                handler.postDelayed(drawRunnable, FRAME_DELAY_MS)
-            }
         }
 
         private fun getCloudPeriod(bitmap: Bitmap?, scaleFactor: Float): Float {
             if (bitmap == null) return 1f
-            // Period is (scaled_width - overlap) in canvas-space pixels
             val cloudScale = (screenW.toFloat() * 1.5f * scaleFactor) / 1024f
             val scaledW = bitmap.width * cloudScale
             val overlapW = scaledW * CLOUD_FADE_PERCENT
@@ -228,6 +220,15 @@ class BlissWallpaperService : WallpaperService() {
         }
 
         private fun updateAnimation(dt: Float) {
+            // Smoothly interpolate currentXOffset towards targetXOffset
+            if (firstFrame) {
+                currentXOffset = targetXOffset
+                firstFrame = false
+            } else if (dt > 0f) {
+                val interpolationFactor = 1f - kotlin.math.exp(-15f * dt)
+                currentXOffset += (targetXOffset - currentXOffset) * interpolationFactor
+            }
+
             // Update cloud offsets (scrolling from left to right)
             cloud1Offset += cloud1Speed * dt
             cloud2Offset += cloud2Speed * dt
@@ -250,33 +251,25 @@ class BlissWallpaperService : WallpaperService() {
 
             val bg = bgBitmap ?: return
 
-            // 1. Render Background (Hill and Sky)
-            // Scale background to cover screen height. We crop width if it exceeds screen.
             val bgScale = screenH.toFloat() / bg.height
             val bgW = bg.width * bgScale
             val bgH = bg.height * bgScale
 
-            // Swipe parallax shift
             val maxBgShift = max(0f, bgW - screenW)
             val bgX = -maxBgShift * currentXOffset
-            val bgY = screenH - bgH // Align background bottom to screen bottom to ensure hill sits correctly
+            val bgY = screenH - bgH
 
-            val bgRect = RectF(bgX, bgY, bgX + bgW, bgY + bgH)
+            bgRect.set(bgX, bgY, bgX + bgW, bgY + bgH)
             canvas.drawBitmap(bg, null, bgRect, paint)
 
-            // 2. Render Wispy Cloud Layer (Background layer, moves slower)
             clouds2Bitmap?.let { c2 ->
-                // Draw higher in the sky (starting around 2% of screen height)
                 drawCloudLayer(canvas, c2, cloud2Offset, screenW, screenH, bgX, 0.4f, 0.02f, 0.15f)
             }
 
-            // 3. Render Fluffy Cloud Layer (Foreground layer, moves faster)
             clouds1Bitmap?.let { c1 ->
-                // Draw slightly lower in the sky (starting around 30% of screen height)
                 drawCloudLayer(canvas, c1, cloud1Offset, screenW, screenH, bgX, 0.7f, 0.28f, 0.35f)
             }
 
-            // 4. Render Foreground Hill (drawn on top of the clouds to sandwich them)
             bgForegroundBitmap?.let { fg ->
                 canvas.drawBitmap(fg, null, bgRect, paint)
             }
@@ -289,27 +282,22 @@ class BlissWallpaperService : WallpaperService() {
             screenW: Int,
             screenH: Int,
             hillShiftX: Float,
-            scaleFactor: Float, // Scale relative to screen width
-            yPositionFactor: Float, // Vertical position as fraction of screen height
-            parallaxFactor: Float // Shift speed relative to hills (must be < 1.0f)
+            scaleFactor: Float,
+            yPositionFactor: Float,
+            parallaxFactor: Float
         ) {
-            // Scale the cloud texture based on a base tile width of 1024 to span 4x width naturally
             val cloudScale = (screenW.toFloat() * 1.5f * scaleFactor) / 1024f
             val scaledW = bitmap.width * cloudScale
             val scaledH = bitmap.height * cloudScale
             val startY = screenH * yPositionFactor
 
-            // Calculate overlap and scroll period
             val overlapW = scaledW * CLOUD_FADE_PERCENT
             val period = scaledW - overlapW
 
-            // Parallax shift based on home screen swipes (scrolls appropriately slower than hills)
             val swipeShiftX = hillShiftX * parallaxFactor
 
-            // Total draw coordinate in X
             var drawX = swipeShiftX + scrollOffset
 
-            // Wrap drawX to fit in the range [-period, 0] to start tiling
             while (drawX > 0) {
                 drawX -= period
             }
@@ -317,11 +305,10 @@ class BlissWallpaperService : WallpaperService() {
                 drawX += period
             }
 
-            // Tile horizontally to cover the screen width, overlapping by overlapW
             var tileX = drawX
             while (tileX < screenW) {
-                val destRect = RectF(tileX, startY, tileX + scaledW, startY + scaledH)
-                canvas.drawBitmap(bitmap, null, destRect, paint)
+                cloudTileRect.set(tileX, startY, tileX + scaledW, startY + scaledH)
+                canvas.drawBitmap(bitmap, null, cloudTileRect, paint)
                 tileX += period
             }
         }
